@@ -1,315 +1,249 @@
 from pptx import Presentation
-from pptx.util import Inches, Pt
-from pptx.enum.text import PP_ALIGN, MSO_ANCHOR
-from pptx.dml.color import RGBColor
 from pptx.enum.shapes import MSO_SHAPE
+from pptx.util import Inches, Pt
+from pptx.dml.color import RGBColor
+from pptx.enum.text import PP_ALIGN, MSO_ANCHOR
 
-from typing import Dict, List, Tuple, Optional, Union
-from pptx.shapes.base import BaseShape
-from pptx.shapes.autoshape import Shape
-from pptx.shapes.graphfrm import GraphicFrame
-from pptx.table import _Cell, Table
-from io import BytesIO
-
-class PresentationBuilder:
-    """A class to build financial presentations with consistent styling"""
+def add_widget_two_tone(
+    slide,
+    width_inches=3.87,
+    top_height_inches=0.51,
+    bottom_height_inches=0.75,
+    position_x_inches=None,  # New parameter for horizontal positioning
+    position_y_inches=2,
+    title_text="Cell Title",
+    left_text_lines=["3Q24", "3Q24 YTD"],
+    right_text_lines=["$12.70 billion", "$39.64 billion"],
+    title_font_size=14,
+    body_font_size=12,
+    border_width_pt=1,
+    primary_color=RGBColor(31, 57, 108),  # #1e3a8a
+    background_color=RGBColor(255, 255, 255)  # white
+):
+    """
+    Creates a PowerPoint slide with revenue information in a custom shape design.
     
-    def __init__(self, file_path=None):
-        if file_path:
-            self.prs = Presentation(file_path)
-        else:
-            self.prs = Presentation()
+    Parameters:
+    -----------
+    width_inches : float
+        Width of the shapes in inches
+    top_height_inches : float
+        Height of the top shape in inches
+    bottom_height_inches : float
+        Height of the bottom shape in inches
+    position_x_inches : float or None
+        Horizontal position from left of slide in inches. If None, centers horizontally
+    position_y_inches : float
+        Vertical position from top of slide in inches
+    title_text : str
+        Text for the title
+    left_text_lines : list
+        List of strings for the left column
+    right_text_lines : list
+        List of strings for the right column
+    title_font_size : int
+        Font size for the title text
+    body_font_size : int
+        Font size for the body text
+    border_width_pt : int
+        Width of the border in points
+    primary_color : RGBColor
+        Primary color for fills and borders
+    background_color : RGBColor
+        Background color for bottom shape
+    """
     
-        self.slide_width = self.prs.slide_width
-        self.slide_height = self.prs.slide_height
-        
-        # Define common styles
-        self.title_font = 'Arial'
-        self.body_font = 'Arial'
-        self.primary_color = RGBColor(0, 70, 127)  # Dark blue
-        self.secondary_color = RGBColor(128, 128, 128)  # Gray
-        
-    def _apply_text_style(self, shape, font_size=12, font_name=None, bold=False, color=None):
-        """Apply consistent text styling to a shape with type checking
-        
-        Args:
-            shape: A shape object that may have a text frame
-            font_size: Size of the font in points
-            font_name: Name of the font to use
-            bold: Whether the text should be bold
-            color: RGB color for the text
-            
-        Returns:
-            bool: True if styling was applied successfully, False otherwise
-        """
-        try:
-            # Check if shape has text_frame attribute
-            if not hasattr(shape, 'text_frame'):
-                return False
-                
-            text_frame = shape.text_frame
-            
-            # Check if text_frame has paragraphs
-            if not hasattr(text_frame, 'paragraphs') or len(text_frame.paragraphs) == 0:
-                return False
-                
-            paragraph = text_frame.paragraphs[0]
-            if not hasattr(paragraph, 'font'):
-                return False
-                
-            # Apply text styling
-            paragraph.font.size = Pt(font_size)
-            paragraph.font.name = font_name or self.body_font
-            paragraph.font.bold = bold
-            if color and hasattr(paragraph.font, 'color'):
-                paragraph.font.color.rgb = color
-                
-            return True
-        except Exception as e:
-            print(f"Warning: Could not apply text style to shape: {str(e)}")
-            return False
     
-    def add_rounded_textbox(self, slide, title: str, content: str, left: float, top: float, width: float, height: float) -> None:
-        """Create a text box with rounded corners and a table
-        
-        Args:
-            title: The title for the first cell
-            content: The content for the second cell
-            left: The left position of the text box
-            top: The top position of the text box
-            width: The width of the text box
-            height: The height of the text box
-        """
-        if not slide:
-            raise ValueError("Slide must not be empty")
-        if not title:
-            raise ValueError("Title must not be empty")    
-        if not left and not top and not width and not height:
-            raise ValueError("Left, top, width or height must not be empty")    
-
-
-        # Add rounded rectangle shape
-        shape = slide.(
-            MSO_SHAPE.ROUNDED_RECTANGLE,
-            Inches(left), Inches(top),
-            Inches(width), Inches(height)
-        )
-        
-        # Set the corner radius to 2 points
-        shape.adjustments[0] = 0.1  # 0.1 corresponds to 2 points
-        
-        # Add table inside the shape
-        table = shape.text_frame.add_table(2, 1, Inches(left), Inches(top), Inches(width), Inches(height)).table
-        
-        # Set title cell
-        cell = table.cell(0, 0)
-        cell.fill.solid()
-        cell.fill.fore_color.rgb = self.primary_color
-        self._apply_text_style(
-            cell.text_frame,
-            font_size=12,
-            bold=True,
-            color=RGBColor(255, 255, 255)
-        )
-        cell.text = title
-        
-        # Set content cell
-        cell = table.cell(1, 0)
-        self._apply_text_style(
-            cell.text_frame,
-            font_size=12,
-            color=self.secondary_color
-        )
-        cell.text = content
-
-    def create_custom_slide(self, title: str, logo_path: str) -> None:
-        """Create a custom slide with a title and a logo
-        
-        Args:
-            title: The slide title
-            logo_path: Path to the logo file (SVG format)
-            
-        Raises:
-            ValueError: If title is empty or logo_path is empty
-        """
-        if not title:
-            raise ValueError("Title must not be empty")
-        if not logo_path:
-            raise ValueError("Logo path must not be empty")
-        
-        # Create a blank slide
-        slide_layout = self.prs.slide_layouts[3]  # Using a blank layout
-        self.prs.slide_width = Inches(13.33)  # Standard widescreen width
-        self.prs.slide_height = Inches(7.5)
-        slide = self.prs.slides.add_slide(slide_layout)
-        
-        # Add title
-        title_box = slide.shapes.add_textbox(
-            Inches(0.4), Inches(0.45),
-            Inches(8), Inches(1)
-        )
-
-        try:
-            title_box = slide.placeholders.title
-        except AttributeError as e:
-            title_box = slide.placeholders[0]
-        
-        self._apply_text_style(
-            title_box,
-            font_size=24,
-            font_name=self.title_font,
-            color=RGBColor(115, 139, 171)
-        )
-        title_box.text = title
-
-        # Add logo
-        try:
-            logo = slide.shapes.add_picture(
-                logo_path,
-                Inches(12.3), Inches(0.14),
-                Inches(.71), Inches(.71)
-            )
-        except Exception as e:
-            print(f"Error adding logo: {str(e)}")
-
-        return slide
-
-    def create_title_slide(self, title: str, subtitle: str) -> None:
-        slide_layout = self.prs.slide_layouts[0]
-        slide = self.prs.slides.add_slide(slide_layout)
-        
-        title_box = slide.shapes.title
-
-        self._apply_text_style(
-            title_box, 
-            font_size=28, 
-            font_name=self.title_font,
-            bold=True,
-            color=self.primary_color
-        )
-        title_box.text = title
-        
-        subtitle_box = slide.placeholders[0]
-
-        self._apply_text_style(
-            subtitle_box,
-            font_size=18,
-            color=self.secondary_color
-        )
-
-        subtitle_box.text = subtitle
-
-        return slide
-        
-    def create_table_slide(self, title: str, headers: List[str], data: List[List[str]]) -> None:
-        """Create a slide with a table
-        
-        Args:
-            title: The slide title
-            headers: List of column headers
-            data: 2D list of table data
-            
-        Raises:
-            ValueError: If title is empty, headers is empty, or data is empty
-            ValueError: If data rows don't match header length
-        """
-        if not title:
-            raise ValueError("Title must not be empty")
-        if not headers:
-            raise ValueError("Headers must not be empty")
-        if not data:
-            raise ValueError("Data must not be empty")
-        
-        # Verify data structure
-        for row in data:
-            if len(row) != len(headers):
-                raise ValueError(f"Data row length {len(row)} does not match headers length {len(headers)}")
-        """Create a slide with a table"""
-        slide_layout = self.prs.slide_layouts[1]
-        slide = self.prs.slides.add_slide(slide_layout)
-        
-        # Add title
-        title_box = slide.shapes.add_textbox(
-            Inches(0.5), Inches(0.5),
-            Inches(9), Inches(0.75)
-        )
-        self._apply_text_style(
-            title_box,
-            font_size=20,
-            bold=True,
-            color=self.primary_color
-        )
-        title_box.text = title
-        
-        # Create table
-        rows = len(data) + 1  # +1 for header
-        cols = len(headers)
-        table = slide.shapes.add_table(
-            rows, cols,
-            Inches(0.5), Inches(1.5),
-            Inches(9), Inches(5)
-        ).table
-        
-        # Set header row
-        for i, header in enumerate(headers):
-            cell = table.cell(0, i)
-            self._apply_text_style(
-                cell.text_frame,
-                font_size=12,
-                bold=True,
-                color=self.primary_color
-            )
-            cell.text = header
-            
-        # Fill data
-        for row_idx, row_data in enumerate(data, start=1):
-            for col_idx, value in enumerate(row_data):
-                cell = table.cell(row_idx, col_idx)
-                self._apply_text_style(
-                    cell.text_frame,
-                    font_size=11
-                )
-                cell.text = str(value)
-                
-    def save(self, filename: str) -> bool:
-        """Save the presentation with error handling
-        
-        Args:
-            filename: The filename to save the presentation to
-            
-        Returns:
-            bool: True if save was successful, False otherwise
-            
-        Raises:
-            ValueError: If filename is empty
-        """
-        if not filename:
-            raise ValueError("Filename must not be empty")
-            
-        try:
-            self.prs.save(filename)
-            return True
-        except Exception as e:
-            print(f"Error saving presentation: {str(e)}")
-            return False
-        """Save the presentation"""
-        self.prs.save(filename)
-
-# Example usage
-def create_presentation():
-    builder = PresentationBuilder('template.pptx')
+    # Convert dimensions to PowerPoint units
+    width = Inches(width_inches)
+    top_height = Inches(top_height_inches)
+    bottom_height = Inches(bottom_height_inches)
     
-    # Title slide
-    title_slide = builder.create_title_slide(
-        "Third Quarter 2024\nEarnings Results Presentation",
-        "October 15, 2024"
+    # Calculate horizontal position
+    if position_x_inches is None:
+        # Center horizontally if no position specified
+        left = (prs.slide_width - width) / 2
+    else:
+        left = Inches(position_x_inches)
+    
+    top_y = Inches(position_y_inches)
+    
+    # Add top rounded rectangle
+    top_shape = slide.shapes.add_shape(
+        MSO_SHAPE.ROUND_2_SAME_RECTANGLE,
+        left,
+        top_y,
+        width,
+        top_height
     )
-
-    custom_slide = builder.create_custom_slide("Monitoring Dashboard", "/Users/alexparker/dev/python_test/GS.PNG")
-
-    builder.add_rounded_textbox(custom_slide, "Total Revenue", "$2.5M", 1, 1, 4, 2)
     
-    builder.save("earnings_presentation.pptx")
+    # Format top shape
+    top_shape.fill.solid()
+    top_shape.fill.fore_color.rgb = primary_color
+    top_shape.line.width = Pt(border_width_pt)
+    top_shape.line.color.rgb = primary_color
+    top_shape.shadow.inherit = False
+    
+    # Add bottom rounded rectangle (rotated 180°)
+    bottom_shape = slide.shapes.add_shape(
+        MSO_SHAPE.ROUND_2_SAME_RECTANGLE,
+        left,
+        top_y + top_height,
+        width,
+        bottom_height
+    )
+    
+    # Format bottom shape
+    bottom_shape.fill.solid()
+    bottom_shape.fill.fore_color.rgb = background_color
+    bottom_shape.line.width = Pt(border_width_pt)
+    bottom_shape.line.color.rgb = primary_color
+    bottom_shape.shadow.inherit = False
+    bottom_shape.rotation = 180
+    
+    # Add title text
+    title = slide.shapes.add_textbox(
+        left,
+        top_y + Inches(0.1),
+        width,
+        top_height
+    )
+    title_frame = title.text_frame
+    title_para = title_frame.paragraphs[0]
+    title_para.alignment = PP_ALIGN.CENTER
+    title_run = title_para.add_run()
+    title_run.text = title_text
+    title_run.font.size = Pt(title_font_size)
+    title_run.font.bold = True
+    title_run.font.color.rgb = background_color
+    
+    # Add left column text
+    left_text = slide.shapes.add_textbox(
+        left + Inches(0.2),
+        top_y + top_height + Inches(0.1),
+        Inches(1),
+        bottom_height - Inches(0.2)
+    )
+    left_frame = left_text.text_frame
+    
+    # Add all left column lines
+    for i, text in enumerate(left_text_lines):
+        if i == 0:
+            p = left_frame.paragraphs[0]
+        else:
+            p = left_frame.add_paragraph()
+            p.space_before = Pt(6)
+        
+        run = p.add_run()
+        run.text = text
+        run.font.size = Pt(body_font_size)
+        run.font.bold = True
+        run.font.color.rgb = primary_color
+    
+    # Add right column text
+    right_text = slide.shapes.add_textbox(
+        left + Inches(1.2),
+        top_y + top_height + Inches(0.1),
+        width - Inches(1.4),
+        bottom_height - Inches(0.2)
+    )
+    right_frame = right_text.text_frame
+    
+    # Add all right column lines
+    for i, text in enumerate(right_text_lines):
+        if i == 0:
+            p = right_frame.paragraphs[0]
+        else:
+            p = right_frame.add_paragraph()
+            p.space_before = Pt(6)
+        
+        p.alignment = PP_ALIGN.RIGHT
+        run = p.add_run()
+        run.text = text
+        run.font.size = Pt(body_font_size)
+        run.font.bold = True
+        run.font.color.rgb = primary_color
+    
+    return slide
 
-if __name__ == "__main__":
-    create_presentation()
+def add_centered_line(slide, line_x=Inches(.47), line_y=Inches(4.03), line_width=Inches(12.52), line_weight=Pt(4)):
+    # Calculate line position
+    
+    # Add line shape
+    line = slide.shapes.add_shape(
+        MSO_SHAPE.LINE_INVERSE,
+        line_x, line_y,
+        line_width, 0
+    )
+    
+    # Format line
+    line.line.color.rgb = RGBColor(31, 57, 108)
+    line.line.width = line_weight # 4 pixels wide
+
+def add_content_box(prs, slide):
+    # Get slide dimensions
+    slide_width = prs.slide_width
+    slide_height = prs.slide_height
+    
+    # Add gray box
+    box_width = Inches(13.33)
+    box_height = Inches(6.49)
+    # Calculate left position to center the box
+    box_left = (slide_width - box_width) / 2
+    # Calculate top position so bottom aligns with slide bottom
+    box_top = slide_height - box_height
+    
+    box = slide.shapes.add_shape(
+        MSO_SHAPE.RECTANGLE,
+        box_left,
+        box_top,
+        box_width,
+        box_height
+    )
+    
+    # Format box
+    fill = box.fill
+    fill.solid()
+    fill.fore_color.rgb = RGBColor(227, 228, 231)  # Gray color
+    # Make the box border transparent
+    box.line.color.rgb = RGBColor(227, 228, 231)
+
+if __name__ == '__main__':
+    # Create presentation and slide
+    prs = Presentation('template.pptx')
+    prs.slide_width = Inches(13.33)
+    prs.slide_height = Inches(7.5)
+    slide = prs.slides.add_slide(prs.slide_layouts[3])  # blank layout
+    slide.shapes.title.text = "Risk Summary"
+
+    # Add content box
+    add_content_box(prs, slide)
+
+    # Add centered line
+    add_centered_line(slide)
+
+    # Example usage with default parameters (centered)
+    add_widget_two_tone(slide, position_x_inches=.47, position_y_inches=1.24, title_text="Technology Operations", left_text_lines=["3Q24", "4Q24"], right_text_lines=["YELLOW", "GREEN"])
+    add_widget_two_tone(slide, position_x_inches=4.73, position_y_inches=1.24, title_text="Technology Development", left_text_lines=["3Q24", "4Q24"], right_text_lines=["YELLOW", "GREEN"])
+    add_widget_two_tone(slide, position_x_inches=9.12, position_y_inches=1.24, title_text="Technology Resiliency", left_text_lines=["3Q24", "4Q24"], right_text_lines=["YELLOW", "GREEN"])
+
+    add_widget_two_tone(slide, position_x_inches=.47, position_y_inches=2.56, title_text="Information & Asset Management", left_text_lines=["3Q24", "4Q24"], right_text_lines=["YELLOW", "GREEN"])
+    add_widget_two_tone(slide, position_x_inches=4.73, position_y_inches=2.56, title_text="Technology Stability", left_text_lines=["3Q24", "4Q24"], right_text_lines=["YELLOW", "GREEN"])
+    add_widget_two_tone(slide, position_x_inches=9.12, position_y_inches=2.56, title_text="Technology Modenization", left_text_lines=["3Q24", "4Q24"], right_text_lines=["YELLOW", "GREEN"])
+
+    # Save the presentation
+    prs.save('risk_summary_slide.pptx')
+
+
+
+    # Example usage with specific horizontal position
+    """
+    create_revenue_slide(
+        width_inches=3.87,
+        position_x_inches=2.0,  # Position 2 inches from left
+        position_y_inches=1.5,
+        title_text="Annual Revenue",
+        left_text_lines=["2023", "2024 (YTD)"],
+        right_text_lines=["$45.2B", "$32.1B"]
+    )
+    """
